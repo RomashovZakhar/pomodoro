@@ -100,4 +100,20 @@ describe("planned focus", () => {
     state = reduce(state, { type: "surrender" }, focusEndsAt + 1_000);
     expect(state.open?.phase).toBe("overtime");
   });
+
+  it("freezes elapsed overtime across a long pause", () => {
+    const focusEndsAt = t0 + 25 * 60_000;
+    const pauseAt = focusEndsAt + 90_000;
+    let state = reduce(initialState(), { type: "start" }, t0);
+    state = reduce(state, { type: "tick" }, focusEndsAt);
+    state = reduce(state, { type: "tick" }, pauseAt);
+    const atPause = derive(state, pauseAt);
+    expect(atPause.clockLabel).toBe("+01:30");
+    state = reduce(state, { type: "pause" }, pauseAt);
+    const resumeAt = pauseAt + 10 * 60_000;
+    state = reduce(state, { type: "resume" }, resumeAt);
+    expect(state.open?.phase).toBe("overtime");
+    const afterResume = derive(state, resumeAt);
+    expect(afterResume.clockLabel).toBe(atPause.clockLabel);
+  });
 });

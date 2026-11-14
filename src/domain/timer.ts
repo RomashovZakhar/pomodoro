@@ -143,22 +143,37 @@ export function reduce(state: TimerState, action: Action, now: number): TimerSta
       return settled;
     }
     case "resume": {
-      if (settled.open === null || settled.open.phase !== "paused-focus") {
+      if (settled.open === null) {
         return settled;
       }
-      const { focusRemainingMs: remaining, ...rest } = settled.open;
-      if (remaining === undefined) {
-        return settled;
+      if (settled.open.phase === "paused-focus") {
+        const { focusRemainingMs: remaining, ...rest } = settled.open;
+        if (remaining === undefined) {
+          return settled;
+        }
+        return {
+          ...settled,
+          open: {
+            ...rest,
+            phase: "focus",
+            focusEndsAt: now + remaining,
+            focusRemainingMs: undefined,
+          },
+        };
       }
-      return {
-        ...settled,
-        open: {
-          ...rest,
-          phase: "focus",
-          focusEndsAt: now + remaining,
-          focusRemainingMs: undefined,
-        },
-      };
+      if (settled.open.phase === "paused-overtime") {
+        const overtimeMs = settled.open.overtimeMs ?? 0;
+        return {
+          ...settled,
+          open: {
+            ...settled.open,
+            phase: "overtime",
+            focusEndsAt: now - overtimeMs,
+            overtimeMs: undefined,
+          },
+        };
+      }
+      return settled;
     }
     case "surrender": {
       if (settled.open === null) {
