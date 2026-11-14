@@ -28,7 +28,7 @@ function App() {
     }
   }, []);
 
-  if (label === null) return null;
+  if (label === null || (label === "panel" && !timer.ready)) return null;
 
   if (label === "day") {
     return (

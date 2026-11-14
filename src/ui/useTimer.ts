@@ -62,9 +62,12 @@ export function useTimer(role: TimerRole, ports: TimerPorts) {
   const [now, setNow] = useState(() => ports.now());
   const stateRef = useRef(state);
   const autostartRef = useRef<boolean | null>(null);
+  const installedRef = useRef(false);
+  const [installed, setInstalled] = useState(false);
   const chain = useRef(Promise.resolve());
 
   const publish = useCallback(async (action: TimerAction) => {
+    if (!installedRef.current) return;
     const currentPorts = portsRef.current;
     const at = currentPorts.now();
     const reduced = reduce(stateRef.current, action, at);
@@ -125,31 +128,38 @@ export function useTimer(role: TimerRole, ports: TimerPorts) {
       });
     };
 
-    void (async () => {
-      const loaded = await portsRef.current.load();
-      if (cancelled) return;
-      stateRef.current = loaded;
-      setState(loaded);
-      track(
-        portsRef.current.listen("timer-tick", () => {
-          enqueue({ type: "tick" });
-        }),
-      );
-      track(
-        portsRef.current.listen("timer-action", (payload) => {
-          if (isTimerAction(payload)) enqueue(payload);
-        }),
-      );
-      enqueue({ type: "tick" });
-    })().catch((error: unknown) => {
-      console.error(error);
-    });
+    chain.current = chain.current
+      .then(async () => {
+        const loaded = await portsRef.current.load();
+        if (cancelled) return;
+        stateRef.current = loaded;
+        installedRef.current = true;
+        setState(loaded);
+        setInstalled(true);
+        await publish({ type: "tick" });
+      })
+      .catch((error: unknown) => {
+        console.error(error);
+      });
+
+    track(
+      portsRef.current.listen("timer-tick", () => {
+        if (!cancelled) enqueue({ type: "tick" });
+      }),
+    );
+    track(
+      portsRef.current.listen("timer-action", (payload) => {
+        if (cancelled || !isTimerAction(payload)) return;
+        enqueue(payload);
+      }),
+    );
 
     return () => {
       cancelled = true;
+      installedRef.current = false;
       for (const stop of stops) stop();
     };
-  }, [enqueue, role]);
+  }, [enqueue, publish, role]);
 
   useEffect(() => {
     if (role !== "mirror") return;
@@ -173,5 +183,6 @@ export function useTimer(role: TimerRole, ports: TimerPorts) {
     };
   }, [role]);
 
-  return { state, now, dispatch };
+  const ready = role !== "owner" || installed;
+  return { state, now, dispatch, ready };
 }

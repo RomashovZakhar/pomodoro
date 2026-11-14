@@ -21,6 +21,7 @@ interface Harness {
 function createHarness(options?: {
   load?: TimerState;
   now?: () => number;
+  loadImpl?: () => Promise<TimerState>;
 }): Harness {
   const saved: TimerState[] = [];
   const trays: string[] = [];
@@ -32,7 +33,8 @@ function createHarness(options?: {
   const handlers = new Map<string, (payload: unknown) => void>();
 
   const ports: TimerPorts = {
-    load: async () => structuredClone(options?.load ?? initialState()),
+    load:
+      options?.loadImpl ?? (async () => structuredClone(options?.load ?? initialState())),
     save: async (state) => {
       saved.push(structuredClone(state));
     },
@@ -183,6 +185,45 @@ describe("owner clock", () => {
     renderHook(() => useTimer("owner", notesOff.ports));
     await waitFor(() => expect(notesOff.played).toEqual(["focus-end"]));
     expect(notesOff.notified).toEqual([]);
+  });
+
+  it("does not publish the blank initial state over sessions still loading", async () => {
+    const loaded: TimerState = {
+      ...initialState(),
+      cycleCount: 1,
+      sessions: [
+        {
+          id: "session-1",
+          tagId: "tag-work",
+          startedAt: T0 - 30 * 60_000,
+          recordedMinutes: 25,
+        },
+      ],
+    };
+    let resolveLoad: (state: TimerState) => void = () => {};
+    const gate = new Promise<TimerState>((resolve) => {
+      resolveLoad = resolve;
+    });
+    const harness = createHarness({
+      loadImpl: () => gate,
+    });
+    const { result } = renderHook(() => useTimer("owner", harness.ports));
+
+    act(() => {
+      result.current.dispatch({ type: "start" });
+      harness.emit("timer-action", { type: "pause" });
+    });
+
+    await act(async () => {
+      resolveLoad(loaded);
+    });
+
+    await waitFor(() => expect(harness.saved.length).toBeGreaterThan(0));
+    for (const state of harness.saved) {
+      expect(state.sessions).toEqual(loaded.sessions);
+    }
+    await waitFor(() => expect(result.current.state.open?.phase).toBe("paused-focus"));
+    expect(result.current.state.sessions).toEqual(loaded.sessions);
   });
 });
 
