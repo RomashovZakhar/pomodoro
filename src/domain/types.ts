@@ -85,7 +85,8 @@ export type TimerAction =
   | { type: "create-tag"; name: string; color: string; focusMinutes?: FocusMinutes }
   | { type: "update-tag"; tagId: string; name: string; color?: string }
   | { type: "archive-tag"; tagId: string }
-  | { type: "update-settings"; settings: Partial<Settings> };
+  | { type: "update-settings"; settings: Partial<Settings> }
+  | { type: "delete-session"; sessionId: string };
 
 export interface Derived {
   phase: DerivedPhase;

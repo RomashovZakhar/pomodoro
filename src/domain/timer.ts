@@ -474,6 +474,15 @@ export function reduce(state: TimerState, action: Action, now: number): TimerSta
       }
       return { ...settled, settings };
     }
+    case "delete-session": {
+      const nextSessions = settled.sessions.filter(
+        (item) => item.id !== action.sessionId,
+      );
+      if (nextSessions.length === settled.sessions.length) {
+        return settled;
+      }
+      return { ...settled, sessions: nextSessions };
+    }
     default:
       return settled;
   }
