@@ -63,6 +63,7 @@ export interface TimerState {
   cycleCount: number;
   pendingAlert: PendingAlert | null;
   focusAlertFired: boolean;
+  breakAlertFired: boolean;
 }
 
 export type DerivedPhase = "idle" | "focus" | "overtime" | "break" | "paused";
@@ -77,7 +78,8 @@ export type TimerAction =
   | { type: "tick" }
   | { type: "ack-alert" }
   | { type: "add-overtime" }
-  | { type: "take-break" };
+  | { type: "take-break" }
+  | { type: "skip-break" };
 
 export interface Derived {
   phase: DerivedPhase;

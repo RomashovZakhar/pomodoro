@@ -64,6 +64,7 @@ export function initialState(): TimerState {
     cycleCount: 0,
     pendingAlert: null,
     focusAlertFired: false,
+    breakAlertFired: false,
   };
 }
 
@@ -109,31 +110,66 @@ function recordFocusAndStartBreak(
   };
 }
 
+function breakRemainingMs(
+  open: NonNullable<TimerState["open"]>,
+  now: number,
+): number {
+  if (open.phase === "paused-break" && open.breakRemainingMs !== undefined) {
+    return open.breakRemainingMs;
+  }
+  if (open.breakEndsAt === undefined) {
+    return 0;
+  }
+  return Math.max(0, open.breakEndsAt - now);
+}
+
 export function settle(state: TimerState, now: number): TimerState {
-  if (state.open === null || state.open.phase !== "focus") {
+  if (state.open === null) {
     return state;
   }
 
-  if (now < state.open.focusEndsAt) {
-    return state;
+  if (state.open.phase === "focus") {
+    if (now < state.open.focusEndsAt) {
+      return state;
+    }
+
+    const nextOpen = {
+      ...state.open,
+      phase: "overtime" as const,
+      overtimeMs: now - state.open.focusEndsAt,
+    };
+
+    if (state.focusAlertFired) {
+      return { ...state, open: nextOpen };
+    }
+
+    return {
+      ...state,
+      open: nextOpen,
+      pendingAlert: "focus-ended",
+      focusAlertFired: true,
+    };
   }
 
-  const nextOpen = {
-    ...state.open,
-    phase: "overtime" as const,
-    overtimeMs: now - state.open.focusEndsAt,
-  };
+  if (state.open.phase === "break") {
+    const breakEndsAt = state.open.breakEndsAt;
+    if (breakEndsAt === undefined || now < breakEndsAt) {
+      return state;
+    }
 
-  if (state.focusAlertFired) {
-    return { ...state, open: nextOpen };
+    if (state.breakAlertFired) {
+      return { ...state, open: null };
+    }
+
+    return {
+      ...state,
+      open: null,
+      pendingAlert: "break-ended",
+      breakAlertFired: true,
+    };
   }
 
-  return {
-    ...state,
-    open: nextOpen,
-    pendingAlert: "focus-ended",
-    focusAlertFired: true,
-  };
+  return state;
 }
 
 export function reduce(state: TimerState, action: Action, now: number): TimerState {
@@ -157,6 +193,7 @@ export function reduce(state: TimerState, action: Action, now: number): TimerSta
         },
         pendingAlert: null,
         focusAlertFired: false,
+        breakAlertFired: false,
       };
     }
     case "pause": {
@@ -180,6 +217,20 @@ export function reduce(state: TimerState, action: Action, now: number): TimerSta
             ...settled.open,
             phase: "paused-overtime",
             overtimeMs: now - settled.open.focusEndsAt,
+          },
+        };
+      }
+      if (settled.open.phase === "break") {
+        const breakEndsAt = settled.open.breakEndsAt;
+        if (breakEndsAt === undefined) {
+          return settled;
+        }
+        return {
+          ...settled,
+          open: {
+            ...settled.open,
+            phase: "paused-break",
+            breakRemainingMs: breakEndsAt - now,
           },
         };
       }
@@ -213,6 +264,21 @@ export function reduce(state: TimerState, action: Action, now: number): TimerSta
             phase: "overtime",
             focusEndsAt: now - overtimeMs,
             overtimeMs: undefined,
+          },
+        };
+      }
+      if (settled.open.phase === "paused-break") {
+        const { breakRemainingMs: remaining, ...rest } = settled.open;
+        if (remaining === undefined) {
+          return settled;
+        }
+        return {
+          ...settled,
+          open: {
+            ...rest,
+            phase: "break",
+            breakEndsAt: now + remaining,
+            breakRemainingMs: undefined,
           },
         };
       }
@@ -268,6 +334,20 @@ export function reduce(state: TimerState, action: Action, now: number): TimerSta
         now,
         settled.open.plannedMinutes,
       );
+    }
+    case "skip-break": {
+      if (settled.open === null) {
+        return settled;
+      }
+      const phase = settled.open.phase;
+      if (phase !== "break" && phase !== "paused-break") {
+        return settled;
+      }
+      return {
+        ...settled,
+        open: null,
+        pendingAlert: null,
+      };
     }
     default:
       return settled;
@@ -329,11 +409,18 @@ function deriveOpen(state: TimerState, now: number): Derived {
     };
   }
 
+  const remainingMs = breakRemainingMs(open, now);
+  const remainingSeconds = remainingMs / 1000;
+  const breakTotalMs =
+    (open.breakIsLong
+      ? state.settings.longBreakMinutes
+      : state.settings.shortBreakMinutes) * 60_000;
+  const menuBarLabel = formatMenuBar(remainingSeconds, "remaining");
   return {
     phase,
-    clockLabel: "00:00",
-    menuBarLabel: null,
-    tooltip: "",
+    clockLabel: formatBigClock(remainingSeconds, "remaining"),
+    menuBarLabel,
+    tooltip: `${menuBarLabel} · ${tag.name}`,
     tagName: tag.name,
     plannedLabel: null,
     addLabel: null,
@@ -341,9 +428,9 @@ function deriveOpen(state: TimerState, now: number): Derived {
     showSurrender: false,
     showAdd: false,
     showBreak: false,
-    showSkip: false,
+    showSkip: true,
     ringMode: "break",
-    ringProgress: 0,
+    ringProgress: breakTotalMs > 0 ? remainingMs / breakTotalMs : 0,
     paused,
   };
 }

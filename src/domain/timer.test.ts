@@ -217,3 +217,98 @@ describe("overtime recording", () => {
     expect(again.pendingAlert).toBeNull();
   });
 });
+
+describe("break cycle", () => {
+  const t0 = 1_700_000_000_000;
+
+  function recordSession(state: ReturnType<typeof initialState>, startAt: number) {
+    const focusEndsAt = startAt + 25 * 60_000;
+    let next = reduce(state, { type: "start" }, startAt);
+    next = reduce(next, { type: "tick" }, focusEndsAt);
+    next = reduce(next, { type: "take-break" }, focusEndsAt);
+    return { state: next, breakEndsAt: next.open!.breakEndsAt! };
+  }
+
+  it("starts a long break after the fourth recorded session", () => {
+    let state = initialState();
+    let cursor = t0;
+    for (let i = 0; i < 3; i++) {
+      const { state: recorded, breakEndsAt } = recordSession(state, cursor);
+      state = reduce(recorded, { type: "skip-break" }, breakEndsAt);
+      cursor = breakEndsAt + 1_000;
+    }
+    const fourth = recordSession(state, cursor);
+    expect(fourth.state.sessions).toHaveLength(4);
+    expect(fourth.state.open?.breakIsLong).toBe(true);
+    const breakStartedAt = cursor + 25 * 60_000;
+    expect(fourth.breakEndsAt).toBe(breakStartedAt + 20 * 60_000);
+    expect(fourth.state.cycleCount).toBe(0);
+  });
+
+  it("starts a short break after the fifth recorded session", () => {
+    let state = initialState();
+    let cursor = t0;
+    for (let i = 0; i < 4; i++) {
+      const { state: recorded, breakEndsAt } = recordSession(state, cursor);
+      state = reduce(recorded, { type: "skip-break" }, breakEndsAt);
+      cursor = breakEndsAt + 1_000;
+    }
+    const fifth = recordSession(state, cursor);
+    expect(fifth.state.sessions).toHaveLength(5);
+    expect(fifth.state.open?.breakIsLong).toBe(false);
+    expect(fifth.breakEndsAt).toBe(cursor + 25 * 60_000 + 5 * 60_000);
+    expect(fifth.state.cycleCount).toBe(1);
+  });
+
+  it("skip-break returns to idle without break-ended alert", () => {
+    const { state, breakEndsAt } = recordSession(initialState(), t0);
+    const skipped = reduce(state, { type: "skip-break" }, breakEndsAt - 60_000);
+    expect(skipped.open).toBeNull();
+    expect(skipped.pendingAlert).toBeNull();
+    expect(derive(skipped, breakEndsAt - 60_000).phase).toBe("idle");
+  });
+
+  it("shows skip only during an active break, not in focus", () => {
+    const running = reduce(initialState(), { type: "start" }, t0);
+    expect(derive(running, t0).showSkip).toBe(false);
+
+    const { state, breakEndsAt } = recordSession(initialState(), t0);
+    expect(derive(state, breakEndsAt - 60_000).showSkip).toBe(true);
+  });
+
+  it("tick at breakEndsAt clears open and fires break-ended once", () => {
+    const { state, breakEndsAt } = recordSession(initialState(), t0);
+    const ended = reduce(state, { type: "tick" }, breakEndsAt);
+    expect(ended.open).toBeNull();
+    expect(ended.pendingAlert).toBe("break-ended");
+    expect(derive(ended, breakEndsAt).phase).toBe("idle");
+
+    const acked = reduce(ended, { type: "ack-alert" }, breakEndsAt);
+    const again = reduce(acked, { type: "tick" }, breakEndsAt + 5_000);
+    expect(again.pendingAlert).toBeNull();
+    expect(again.breakAlertFired).toBe(true);
+  });
+
+  it("pause during break freezes remaining time across wall clock gap", () => {
+    const { state, breakEndsAt } = recordSession(initialState(), t0);
+    const pauseAt = t0 + 25 * 60_000 + 60_000;
+    let paused = reduce(state, { type: "pause" }, pauseAt);
+    expect(paused.open?.phase).toBe("paused-break");
+
+    const resumeAt = pauseAt + 10 * 60_000;
+    paused = reduce(paused, { type: "resume" }, resumeAt);
+    expect(paused.open?.phase).toBe("break");
+    const newEndsAt = paused.open!.breakEndsAt!;
+    expect(newEndsAt).toBe(resumeAt + (breakEndsAt - pauseAt));
+    const ended = reduce(paused, { type: "tick" }, newEndsAt);
+    expect(ended.open).toBeNull();
+    expect(ended.pendingAlert).toBe("break-ended");
+  });
+
+  it("surrender from focus still does not increment cycleCount", () => {
+    let state = reduce(initialState(), { type: "start" }, t0);
+    state = reduce(state, { type: "surrender" }, t0 + 30_000);
+    expect(state.cycleCount).toBe(0);
+    expect(state.sessions).toEqual([]);
+  });
+});
