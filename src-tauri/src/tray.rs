@@ -184,6 +184,7 @@ fn toggle_panel(app: &AppHandle) -> Result<(), String> {
 }
 
 fn request_quit(app: &AppHandle) {
+    crate::clock::stop();
     QUITTING.store(true, Ordering::SeqCst);
     app.exit(0);
 }

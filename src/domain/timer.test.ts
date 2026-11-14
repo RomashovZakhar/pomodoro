@@ -276,6 +276,14 @@ describe("break cycle", () => {
     expect(derive(state, breakEndsAt - 60_000).showSkip).toBe(true);
   });
 
+  it("formats the break menu bar and tooltip as перерыв", () => {
+    const { state, breakEndsAt } = recordSession(initialState(), t0);
+    const derived = derive(state, breakEndsAt - 5 * 60_000);
+    expect(derived.clockLabel).toBe("05:00");
+    expect(derived.menuBarLabel).toBe("перерыв 5:00");
+    expect(derived.tooltip).toBe("перерыв 5:00 · Перерыв");
+  });
+
   it("tick at breakEndsAt clears open and fires break-ended once", () => {
     const { state, breakEndsAt } = recordSession(initialState(), t0);
     const ended = reduce(state, { type: "tick" }, breakEndsAt);

@@ -1,50 +1,55 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { DayWindow } from "./ui/DayWindow";
+import { Panel } from "./ui/Panel";
+import { createTauriPorts } from "./ui/tauriPorts";
+import { useTimer } from "./ui/useTimer";
+import "./ui/theme.css";
+
+function detectPlatform(userAgent: string): "windows" | "macos" | "linux" {
+  if (userAgent.includes("Windows")) return "windows";
+  if (userAgent.includes("Mac")) return "macos";
+  return "linux";
+}
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [label, setLabel] = useState<"panel" | "day" | null>(null);
+  const ports = useMemo(() => createTauriPorts(), []);
+  const role = label === "panel" ? "owner" : "mirror";
+  const timer = useTimer(role, ports);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  useEffect(() => {
+    try {
+      const current = getCurrentWebview().label;
+      setLabel(current === "day" ? "day" : "panel");
+    } catch {
+      setLabel("panel");
+    }
+  }, []);
+
+  if (label === null) return null;
+
+  if (label === "day") {
+    return (
+      <DayWindow
+        state={timer.state}
+        now={timer.now}
+        platform={detectPlatform(navigator.userAgent)}
+        onAction={timer.dispatch}
+      />
+    );
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <Panel
+      state={timer.state}
+      now={timer.now}
+      onAction={timer.dispatch}
+      onOpenDay={() => {
+        void invoke("show_day");
+      }}
+    />
   );
 }
 

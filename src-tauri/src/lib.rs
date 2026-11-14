@@ -1,4 +1,5 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod clock;
 mod tray;
 
 use std::path::Path;
@@ -56,6 +57,21 @@ fn atomic_replace(from: &Path, to: &Path) -> std::io::Result<()> {
 }
 
 #[tauri::command]
+fn read_alert_sound(app: tauri::AppHandle, name: String) -> Result<Vec<u8>, String> {
+    if name != "focus-end" && name != "break-end" {
+        return Err("неизвестный сигнал".into());
+    }
+    let path = app
+        .path()
+        .resolve(
+            format!("sounds/{name}.wav"),
+            tauri::path::BaseDirectory::Resource,
+        )
+        .map_err(|err| err.to_string())?;
+    std::fs::read(path).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
 fn replace_storage_file(app: tauri::AppHandle) -> Result<(), String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let from = dir.join(POMODORO_TEMP_FILE);
@@ -83,11 +99,13 @@ pub fn run() {
             tray::install(app.handle()).map_err(|err| -> Box<dyn std::error::Error> {
                 std::io::Error::other(err).into()
             })?;
+            clock::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             greet,
             replace_storage_file,
+            read_alert_sound,
             tray::set_tray_status,
             tray::show_panel,
             tray::show_day,

@@ -9,7 +9,9 @@ afterEach(() => {
 
 describe("create-tag", () => {
   it("appends a new tag with a random id", () => {
-    vi.spyOn(crypto, "randomUUID").mockReturnValue("tag-new");
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(
+      "11111111-1111-4111-8111-111111111111",
+    );
     const state = reduce(
       initialState(),
       { type: "create-tag", name: "Проект", color: "#112233" },
@@ -17,7 +19,7 @@ describe("create-tag", () => {
     );
     expect(state.tags).toHaveLength(4);
     expect(state.tags[3]).toEqual({
-      id: "tag-new",
+      id: "11111111-1111-4111-8111-111111111111",
       name: "Проект",
       color: "#112233",
       focusMinutes: 25,

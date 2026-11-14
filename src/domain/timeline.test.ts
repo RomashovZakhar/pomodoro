@@ -13,9 +13,6 @@ const TIME_ZONE = "Europe/Moscow";
 /** 15 ноября 2026, 11:00 по Москве (UTC+3). */
 const NOV_15_11_MOSCOW = Date.UTC(2026, 10, 15, 8, 0, 0);
 
-/** 14 ноября 2026, 11:00 по Москве. */
-const NOV_14_11_MOSCOW = Date.UTC(2026, 10, 14, 8, 0, 0);
-
 const tags: Tag[] = [
   { id: "tag-work", name: "Работа", color: "#E07A4C", focusMinutes: 25 },
   { id: "tag-study", name: "Учёба", color: "#E0A24C", focusMinutes: 25 },

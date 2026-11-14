@@ -398,16 +398,15 @@ export function reduce(state: TimerState, action: Action, now: number): TimerSta
       return { ...settled, selectedTagId: action.tagId };
     }
     case "set-focus-minutes": {
-      if (!isFocusMinutes(action.minutes)) {
+      const minutes = action.minutes;
+      if (!isFocusMinutes(minutes)) {
         return settled;
       }
       const selectedId = settled.selectedTagId;
       return {
         ...settled,
         tags: settled.tags.map((tag) =>
-          tag.id === selectedId
-            ? { ...tag, focusMinutes: action.minutes }
-            : tag,
+          tag.id === selectedId ? { ...tag, focusMinutes: minutes } : tag,
         ),
       };
     }
@@ -549,12 +548,12 @@ function deriveOpen(state: TimerState, now: number): Derived {
     (open.breakIsLong
       ? state.settings.longBreakMinutes
       : state.settings.shortBreakMinutes) * 60_000;
-  const menuBarLabel = formatMenuBar(remainingSeconds, "remaining");
+  const menuBarLabel = formatMenuBar(remainingSeconds, "break");
   return {
     phase,
     clockLabel: formatBigClock(remainingSeconds, "remaining"),
     menuBarLabel,
-    tooltip: `${menuBarLabel} · ${tag.name}`,
+    tooltip: `${menuBarLabel} · Перерыв`,
     tagName: tag.name,
     plannedLabel: null,
     addLabel: null,
