@@ -59,4 +59,22 @@ Tests  3 passed (3)
 
 ## Commits
 
-(See parent report for SHA after commit.)
+- `35e7fe6` feat: scaffold the timer and clock labels
+
+## Fix: restore `.worktrees/` in `.gitignore`
+
+**Change:** After the Tauri `--force` scaffold replaced `.gitignore`, re-added `.worktrees/` next to `node_modules`, `dist`, and `src-tauri/target` so nested worktrees are not picked up by a broad `git add`.
+
+**Covering check:**
+
+```powershell
+cd C:/Users/Захар/Documents/codeProjects/pomodoro
+git check-ignore -q .worktrees
+echo exit: $LASTEXITCODE
+```
+
+**Output:** `exit: 0` — path `.worktrees` is ignored.
+
+(From the pomodoro worktree checkout root, `git check-ignore -q .worktrees` returns 1 because that cwd has no `.worktrees` child; the rule targets the main clone root where `.worktrees/` exists.)
+
+**Commit:** `0a17cb1` fix: restore .worktrees ignore rule
