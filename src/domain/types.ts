@@ -79,7 +79,13 @@ export type TimerAction =
   | { type: "ack-alert" }
   | { type: "add-overtime" }
   | { type: "take-break" }
-  | { type: "skip-break" };
+  | { type: "skip-break" }
+  | { type: "select-tag"; tagId: string }
+  | { type: "set-focus-minutes"; minutes: number }
+  | { type: "create-tag"; name: string; color: string; focusMinutes?: FocusMinutes }
+  | { type: "update-tag"; tagId: string; name: string; color?: string }
+  | { type: "archive-tag"; tagId: string }
+  | { type: "update-settings"; settings: Partial<Settings> };
 
 export interface Derived {
   phase: DerivedPhase;

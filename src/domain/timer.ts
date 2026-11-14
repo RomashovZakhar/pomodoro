@@ -4,12 +4,15 @@ import {
   DEFAULT_TAGS,
 } from "./defaults";
 import { addButtonLabel, formatBigClock, formatMenuBar, overtimeAddMinutes } from "./time";
+import { FOCUS_MINUTE_OPTIONS } from "./types";
 import type {
   CompletedSession,
   Derived,
   DerivedPhase,
+  FocusMinutes,
   OpenPhase,
   OpenSession,
+  Settings,
   Tag,
   TimerAction,
   TimerState,
@@ -21,6 +24,44 @@ function findTag(tags: Tag[], tagId: string): Tag {
     throw new Error(`unknown tag: ${tagId}`);
   }
   return tag;
+}
+
+function isArchived(tag: Tag): boolean {
+  return tag.archived === true;
+}
+
+function isFocusMinutes(minutes: number): minutes is FocusMinutes {
+  return (FOCUS_MINUTE_OPTIONS as readonly number[]).includes(minutes);
+}
+
+function activeTagCount(tags: Tag[]): number {
+  return tags.filter((tag) => !isArchived(tag)).length;
+}
+
+function firstActiveTagId(tags: Tag[], exceptId?: string): string | undefined {
+  return tags.find((tag) => !isArchived(tag) && tag.id !== exceptId)?.id;
+}
+
+function applySettingsPatch(
+  current: Settings,
+  patch: Partial<Settings>,
+): Settings | null {
+  if (patch.shortBreakMinutes !== undefined) {
+    if (patch.shortBreakMinutes < 1 || patch.shortBreakMinutes > 30) {
+      return null;
+    }
+  }
+  if (patch.longBreakMinutes !== undefined) {
+    if (patch.longBreakMinutes < 1 || patch.longBreakMinutes > 60) {
+      return null;
+    }
+  }
+  if (patch.sessionsUntilLongBreak !== undefined) {
+    if (patch.sessionsUntilLongBreak < 1 || patch.sessionsUntilLongBreak > 10) {
+      return null;
+    }
+  }
+  return { ...current, ...patch };
 }
 
 function isPausedPhase(phase: OpenPhase): boolean {
@@ -348,6 +389,90 @@ export function reduce(state: TimerState, action: Action, now: number): TimerSta
         open: null,
         pendingAlert: null,
       };
+    }
+    case "select-tag": {
+      const tag = settled.tags.find((item) => item.id === action.tagId);
+      if (!tag || isArchived(tag)) {
+        return settled;
+      }
+      return { ...settled, selectedTagId: action.tagId };
+    }
+    case "set-focus-minutes": {
+      if (!isFocusMinutes(action.minutes)) {
+        return settled;
+      }
+      const selectedId = settled.selectedTagId;
+      return {
+        ...settled,
+        tags: settled.tags.map((tag) =>
+          tag.id === selectedId
+            ? { ...tag, focusMinutes: action.minutes }
+            : tag,
+        ),
+      };
+    }
+    case "create-tag": {
+      const focusMinutes =
+        action.focusMinutes !== undefined && isFocusMinutes(action.focusMinutes)
+          ? action.focusMinutes
+          : (25 as FocusMinutes);
+      return {
+        ...settled,
+        tags: [
+          ...settled.tags,
+          {
+            id: crypto.randomUUID(),
+            name: action.name,
+            color: action.color,
+            focusMinutes,
+          },
+        ],
+      };
+    }
+    case "update-tag": {
+      const index = settled.tags.findIndex((item) => item.id === action.tagId);
+      if (index === -1) {
+        return settled;
+      }
+      const nextTags = [...settled.tags];
+      const current = nextTags[index]!;
+      nextTags[index] = {
+        ...current,
+        name: action.name,
+        ...(action.color !== undefined ? { color: action.color } : {}),
+      };
+      return { ...settled, tags: nextTags };
+    }
+    case "archive-tag": {
+      const tag = settled.tags.find((item) => item.id === action.tagId);
+      if (!tag || isArchived(tag)) {
+        return settled;
+      }
+      if (activeTagCount(settled.tags) <= 1) {
+        return settled;
+      }
+      if (settled.open?.tagId === action.tagId) {
+        return settled;
+      }
+      const tags = settled.tags.map((item) =>
+        item.id === action.tagId ? { ...item, archived: true } : item,
+      );
+      let selectedTagId = settled.selectedTagId;
+      if (selectedTagId === action.tagId) {
+        const fallback = firstActiveTagId(tags, action.tagId);
+        if (fallback === undefined) {
+          return settled;
+        }
+        selectedTagId = fallback;
+      }
+      return { ...settled, tags, selectedTagId };
+    }
+    case "update-settings": {
+      const settings = applySettingsPatch(settled.settings, action.settings);
+      if (settings === null) {
+        return settled;
+      }
+      return { ...settled, settings };
     }
     default:
       return settled;
