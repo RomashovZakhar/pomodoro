@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derive, initialState, reduce } from "./timer";
+import { derive, initialState, reduce, settle } from "./timer";
 
 describe("timer idle", () => {
   it("derives the default idle panel", () => {
@@ -115,5 +115,105 @@ describe("planned focus", () => {
     expect(state.open?.phase).toBe("overtime");
     const afterResume = derive(state, resumeAt);
     expect(afterResume.clockLabel).toBe(atPause.clockLabel);
+  });
+});
+
+describe("overtime recording", () => {
+  const t0 = 1_700_000_000_000;
+
+  function overtimeAt(elapsedMs: number) {
+    const focusEndsAt = t0 + 25 * 60_000;
+    let state = reduce(initialState(), { type: "start" }, t0);
+    state = reduce(state, { type: "tick" }, focusEndsAt + elapsedMs);
+    return { state, focusEndsAt, now: focusEndsAt + elapsedMs };
+  }
+
+  it("derives add labels in overtime", () => {
+    const { state, now } = overtimeAt(192_000);
+    const derived = derive(state, now);
+    expect(derived.clockLabel).toBe("+03:12");
+    expect(derived.plannedLabel).toBe("было 25:00");
+    expect(derived.addLabel).toBe("Добавить 4 мин");
+    expect(derived.addMinutes).toBe(4);
+    expect(derived.showAdd).toBe(true);
+    expect(derived.showBreak).toBe(true);
+    expect(derived.showSurrender).toBe(false);
+  });
+
+  it("records planned plus N on add-overtime and starts a short break", () => {
+    const { state, now } = overtimeAt(192_000);
+    const next = reduce(state, { type: "add-overtime" }, now);
+    expect(next.sessions).toHaveLength(1);
+    expect(next.sessions[0]).toMatchObject({
+      tagId: "tag-work",
+      startedAt: t0,
+      recordedMinutes: 29,
+    });
+    expect(next.sessions[0].id).toBeTruthy();
+    expect(next.open?.phase).toBe("break");
+    expect(next.open?.breakIsLong).toBe(false);
+    expect(next.open?.breakEndsAt).toBe(now + 5 * 60_000);
+    expect(next.cycleCount).toBe(1);
+    expect(next.focusAlertFired).toBe(true);
+    expect(next.pendingAlert).toBe("focus-ended");
+  });
+
+  it("records planned minutes only on take-break", () => {
+    const { state, now } = overtimeAt(192_000);
+    const next = reduce(state, { type: "take-break" }, now);
+    expect(next.sessions).toHaveLength(1);
+    expect(next.sessions[0].recordedMinutes).toBe(25);
+    expect(next.open?.phase).toBe("break");
+    expect(next.cycleCount).toBe(1);
+  });
+
+  it("freezes add minutes while overtime is paused", () => {
+    const focusEndsAt = t0 + 25 * 60_000;
+    const pauseAt = focusEndsAt + 90_000;
+    let state = reduce(initialState(), { type: "start" }, t0);
+    state = reduce(state, { type: "tick" }, pauseAt);
+    state = reduce(state, { type: "pause" }, pauseAt);
+    const resumeAt = pauseAt + 10 * 60_000;
+    const frozen = derive(state, resumeAt);
+    expect(frozen.addMinutes).toBe(2);
+    expect(frozen.clockLabel).toBe("+01:30");
+    state = reduce(state, { type: "resume" }, resumeAt);
+    const afterResume = derive(state, resumeAt + 30_000);
+    expect(afterResume.addMinutes).toBe(3);
+    expect(afterResume.clockLabel).toBe("+02:00");
+  });
+
+  it("adds from paused-overtime without ticking forward", () => {
+    const focusEndsAt = t0 + 25 * 60_000;
+    const pauseAt = focusEndsAt + 90_000;
+    let state = reduce(initialState(), { type: "start" }, t0);
+    state = reduce(state, { type: "tick" }, pauseAt);
+    state = reduce(state, { type: "pause" }, pauseAt);
+    const resumeAt = pauseAt + 10 * 60_000;
+    const next = reduce(state, { type: "add-overtime" }, resumeAt);
+    expect(next.sessions[0].recordedMinutes).toBe(27);
+    expect(next.open?.phase).toBe("break");
+  });
+
+  it("caps add minutes and clock at three hours", () => {
+    const elapsedMs = 181 * 60_000;
+    const { state, now } = overtimeAt(elapsedMs);
+    const derived = derive(state, now);
+    expect(derived.addLabel).toBe("Добавить 180 мин");
+    expect(derived.addMinutes).toBe(180);
+    expect(derived.clockLabel).toBe("+3:00:00");
+  });
+
+  it("settles into overtime after reopen with one alert and wall-clock N", () => {
+    const focusEndsAt = t0 + 25 * 60_000;
+    const saved = reduce(initialState(), { type: "start" }, t0);
+    const later = focusEndsAt + 181 * 60_000;
+    const reopened = settle(saved, later);
+    expect(reopened.open?.phase).toBe("overtime");
+    expect(reopened.pendingAlert).toBe("focus-ended");
+    expect(derive(reopened, later).addMinutes).toBe(180);
+    const acked = { ...reopened, pendingAlert: null, focusAlertFired: true };
+    const again = settle(acked, later + 60_000);
+    expect(again.pendingAlert).toBeNull();
   });
 });

@@ -3,8 +3,17 @@ import {
   DEFAULT_SETTINGS,
   DEFAULT_TAGS,
 } from "./defaults";
-import { formatBigClock, formatMenuBar } from "./time";
-import type { Derived, DerivedPhase, OpenPhase, Tag, TimerState } from "./types";
+import { addButtonLabel, formatBigClock, formatMenuBar, overtimeAddMinutes } from "./time";
+import type {
+  CompletedSession,
+  Derived,
+  DerivedPhase,
+  OpenPhase,
+  OpenSession,
+  Tag,
+  TimerAction,
+  TimerState,
+} from "./types";
 
 function findTag(tags: Tag[], tagId: string): Tag {
   const tag = tags.find((item) => item.id === tagId);
@@ -58,13 +67,47 @@ export function initialState(): TimerState {
   };
 }
 
-export type Action =
-  | { type: "start" }
-  | { type: "pause" }
-  | { type: "resume" }
-  | { type: "surrender" }
-  | { type: "tick" }
-  | { type: "ack-alert" };
+export type Action = TimerAction;
+
+function overtimeElapsedMs(open: OpenSession, now: number): number {
+  if (open.phase === "paused-overtime") {
+    return open.overtimeMs ?? 0;
+  }
+  return Math.max(0, now - open.focusEndsAt);
+}
+
+function recordFocusAndStartBreak(
+  state: TimerState,
+  now: number,
+  recordedMinutes: number,
+): TimerState {
+  const open = state.open!;
+  const isLongBreak =
+    (state.cycleCount + 1) % state.settings.sessionsUntilLongBreak === 0;
+  const breakMinutes = isLongBreak
+    ? state.settings.longBreakMinutes
+    : state.settings.shortBreakMinutes;
+  const session: CompletedSession = {
+    id: crypto.randomUUID(),
+    tagId: open.tagId,
+    startedAt: open.startedAt,
+    recordedMinutes,
+  };
+  return {
+    ...state,
+    sessions: [...state.sessions, session],
+    cycleCount: isLongBreak ? 0 : state.cycleCount + 1,
+    open: {
+      phase: "break",
+      tagId: open.tagId,
+      startedAt: open.startedAt,
+      plannedMinutes: open.plannedMinutes,
+      focusEndsAt: open.focusEndsAt,
+      breakEndsAt: now + breakMinutes * 60_000,
+      breakIsLong: isLongBreak,
+    },
+  };
+}
 
 export function settle(state: TimerState, now: number): TimerState {
   if (state.open === null || state.open.phase !== "focus") {
@@ -197,6 +240,35 @@ export function reduce(state: TimerState, action: Action, now: number): TimerSta
       return settled;
     case "ack-alert":
       return { ...settled, pendingAlert: null };
+    case "add-overtime": {
+      if (settled.open === null) {
+        return settled;
+      }
+      const phase = settled.open.phase;
+      if (phase !== "overtime" && phase !== "paused-overtime") {
+        return settled;
+      }
+      const n = overtimeAddMinutes(overtimeElapsedMs(settled.open, now));
+      return recordFocusAndStartBreak(
+        settled,
+        now,
+        settled.open.plannedMinutes + n,
+      );
+    }
+    case "take-break": {
+      if (settled.open === null) {
+        return settled;
+      }
+      const phase = settled.open.phase;
+      if (phase !== "overtime" && phase !== "paused-overtime") {
+        return settled;
+      }
+      return recordFocusAndStartBreak(
+        settled,
+        now,
+        settled.open.plannedMinutes,
+      );
+    }
     default:
       return settled;
   }
@@ -233,24 +305,23 @@ function deriveOpen(state: TimerState, now: number): Derived {
   }
 
   if (open.phase === "overtime" || open.phase === "paused-overtime") {
-    const elapsedMs =
-      open.phase === "paused-overtime"
-        ? (open.overtimeMs ?? 0)
-        : Math.max(0, now - open.focusEndsAt);
+    const elapsedMs = overtimeElapsedMs(open, now);
     const elapsedSeconds = elapsedMs / 1000;
+    const addMinutes = overtimeAddMinutes(elapsedMs);
     const menuBarLabel = formatMenuBar(elapsedSeconds, "overtime");
+    const plannedClock = formatBigClock(open.plannedMinutes * 60, "remaining");
     return {
       phase,
       clockLabel: formatBigClock(elapsedSeconds, "overtime"),
       menuBarLabel,
       tooltip: `${menuBarLabel} · ${tag.name}`,
       tagName: tag.name,
-      plannedLabel: null,
-      addLabel: null,
-      addMinutes: 0,
+      plannedLabel: `было ${plannedClock}`,
+      addLabel: addButtonLabel(addMinutes),
+      addMinutes,
       showSurrender: false,
-      showAdd: false,
-      showBreak: false,
+      showAdd: true,
+      showBreak: true,
       showSkip: false,
       ringMode: "overtime",
       ringProgress: 1,

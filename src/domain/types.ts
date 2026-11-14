@@ -69,6 +69,16 @@ export type DerivedPhase = "idle" | "focus" | "overtime" | "break" | "paused";
 
 export type RingMode = "idle" | "focus" | "overtime" | "break";
 
+export type TimerAction =
+  | { type: "start" }
+  | { type: "pause" }
+  | { type: "resume" }
+  | { type: "surrender" }
+  | { type: "tick" }
+  | { type: "ack-alert" }
+  | { type: "add-overtime" }
+  | { type: "take-break" };
+
 export interface Derived {
   phase: DerivedPhase;
   clockLabel: string;
