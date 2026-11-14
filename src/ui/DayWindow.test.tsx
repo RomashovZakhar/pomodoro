@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WINDOWS_TRAY_HINT } from "../domain/defaults";
+import { timeline } from "../domain/timeline";
 import { initialState, reduce } from "../domain/timer";
 import type { TimerState } from "../domain/types";
 import { DayWindow } from "./DayWindow";
@@ -81,6 +82,93 @@ describe("day window timer", () => {
     field.blur();
     await user.keyboard(" ");
     expect(onAction).toHaveBeenCalledWith({ type: "pause" });
+  });
+});
+
+function weekDayLabel(start: number, zone: string): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: zone,
+  }).format(start);
+}
+
+describe("week timeline", () => {
+  it("shows seven labeled day rows in the week view", async () => {
+    const user = userEvent.setup();
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const now = Date.UTC(2026, 10, 15, 12, 0, 0);
+    const weekDays = timeline([], initialState().tags, now, "week", zone);
+    expect(weekDays).toHaveLength(7);
+
+    const sessionDay = weekDays[3]!;
+    const otherSessionDay = weekDays[5]!;
+    const emptyDay = weekDays[1]!;
+    const sameLocalTime = 10 * 60_000;
+    const state: TimerState = {
+      ...initialState(),
+      sessions: [
+        {
+          id: "sess-week",
+          tagId: "tag-work",
+          startedAt: sessionDay.start + sameLocalTime,
+          recordedMinutes: 25,
+        },
+        {
+          id: "sess-other-day",
+          tagId: "tag-work",
+          startedAt: otherSessionDay.start + sameLocalTime,
+          recordedMinutes: 25,
+        },
+      ],
+    };
+
+    render(
+      <DayWindow state={state} now={now} platform="linux" onAction={() => {}} />,
+    );
+    const timelineSection = screen.getByRole("group", { name: "Лента" });
+    await user.click(within(timelineSection).getByRole("button", { name: "Неделя" }));
+
+    const labels = weekDays.map((d) => weekDayLabel(d.start, zone));
+    expect(new Set(labels).size).toBe(7);
+    for (const label of labels) {
+      expect(within(timelineSection).getByText(label)).toBeTruthy();
+    }
+
+    const deleteButtons = within(timelineSection).getAllByRole("button", {
+      name: "Удалить сессию",
+    });
+    expect(deleteButtons).toHaveLength(2);
+
+    for (const button of deleteButtons) {
+      const row = button.closest(".timeline-day");
+      expect(row).toBeTruthy();
+      const label = within(row as HTMLElement).getByRole("heading", {
+        level: 3,
+      });
+      expect(label.textContent?.length).toBeGreaterThan(0);
+    }
+    const sessionRow = deleteButtons[0]!.closest(".timeline-day");
+    expect(
+      within(sessionRow as HTMLElement).getByText(weekDayLabel(sessionDay.start, zone)),
+    ).toBeTruthy();
+    const otherRow = deleteButtons[1]!.closest(".timeline-day");
+    expect(
+      within(otherRow as HTMLElement).getByText(
+        weekDayLabel(otherSessionDay.start, zone),
+      ),
+    ).toBeTruthy();
+
+    const emptyRow = within(timelineSection)
+      .getByText(weekDayLabel(emptyDay.start, zone))
+      .closest(".timeline-day");
+    expect(emptyRow).toBeTruthy();
+    expect(
+      within(emptyRow as HTMLElement).queryByRole("button", {
+        name: "Удалить сессию",
+      }),
+    ).toBeNull();
   });
 });
 

@@ -164,6 +164,17 @@ button[aria-pressed="true"] {
   padding: 16px;
 }
 
+.timeline-day + .timeline-day {
+  margin-top: 12px;
+}
+
+.timeline-day-heading {
+  margin: 0 0 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .block {
   display: grid;
   grid-template-columns: 12px 1fr auto;

@@ -20,6 +20,15 @@ export function TimelineView({
     minute: "2-digit",
     timeZone: zone,
   });
+  const weekDayLabel =
+    view === "week"
+      ? new Intl.DateTimeFormat("ru-RU", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          timeZone: zone,
+        })
+      : null;
 
   return (
     <section className="card timeline" role="group" aria-label="Лента">
@@ -41,7 +50,15 @@ export function TimelineView({
       </div>
       {empty ? <p>{emptyDayCopy()}</p> : null}
       {days.map((day) => (
-        <div key={day.start}>
+        <div
+          key={day.start}
+          className={view === "week" ? "timeline-day" : undefined}
+        >
+          {weekDayLabel ? (
+            <h3 className="timeline-day-heading">
+              {weekDayLabel.format(day.start)}
+            </h3>
+          ) : null}
           {day.blocks.map((block) => (
             <article key={block.sessionId} className="block">
               <span className="swatch" style={{ background: block.color }} />
