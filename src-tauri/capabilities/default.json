@@ -1,13 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for the panel and day windows",
+  "windows": ["panel", "day"],
   "permissions": [
     "core:default",
     "opener:default",
     "fs:default",
     "fs:allow-appdata-read",
-    "fs:allow-appdata-write"
+    "fs:allow-appdata-write",
+    "notification:default",
+    "autostart:default"
   ]
 }

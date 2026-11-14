@@ -1,4 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod tray;
+
 use std::path::Path;
 use tauri::Manager;
 
@@ -16,7 +18,7 @@ fn atomic_replace(from: &Path, to: &Path) -> std::io::Result<()> {
         use std::os::windows::ffi::OsStrExt;
 
         #[link(name = "kernel32")]
-        extern "system" {
+        unsafe extern "system" {
             fn MoveFileExW(
                 lpExistingFileName: *const u16,
                 lpNewFileName: *const u16,
@@ -64,9 +66,33 @@ fn replace_storage_file(app: tauri::AppHandle) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let app = app.clone();
+            let _ = app.clone().run_on_main_thread(move || {
+                let _ = tray::open_panel(&app);
+            });
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![greet, replace_storage_file])
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .setup(|app| {
+            tray::install(app.handle()).map_err(|err| -> Box<dyn std::error::Error> {
+                std::io::Error::other(err).into()
+            })?;
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            replace_storage_file,
+            tray::set_tray_status,
+            tray::show_panel,
+            tray::show_day,
+            tray::quit
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
