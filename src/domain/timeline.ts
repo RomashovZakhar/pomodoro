@@ -18,7 +18,6 @@ export interface TimelineDay {
 
 const MISSING_TAG_NAME = "Без тега";
 const MISSING_TAG_COLOR = "#A8A49B";
-const MS_PER_DAY = 86_400_000;
 
 type ZonedYmd = { year: number; month: number; day: number };
 
@@ -83,7 +82,12 @@ export function startOfZonedDay(timestamp: number, timeZone: string): number {
   return zonedTimeToUtc(p.year, p.month, p.day, 0, 0, 0, timeZone);
 }
 
-function calendarAddDays(year: number, month: number, day: number, delta: number): ZonedYmd {
+export function calendarAddDays(
+  year: number,
+  month: number,
+  day: number,
+  delta: number,
+): ZonedYmd {
   const d = new Date(Date.UTC(year, month - 1, day + delta));
   return {
     year: d.getUTCFullYear(),
@@ -133,10 +137,23 @@ export function endOfZonedPeriod(
   timeZone: string,
 ): number {
   if (range === "day") {
-    return startOfZonedDay(anchor, timeZone) + MS_PER_DAY;
+    const p = getZonedParts(anchor, timeZone);
+    const next = calendarAddDays(p.year, p.month, p.day, 1);
+    return zonedTimeToUtc(next.year, next.month, next.day, 0, 0, 0, timeZone);
   }
   if (range === "week") {
-    return startOfZonedWeek(anchor, timeZone) + 7 * MS_PER_DAY;
+    const weekStart = startOfZonedWeek(anchor, timeZone);
+    const p = getZonedParts(weekStart, timeZone);
+    const nextMonday = calendarAddDays(p.year, p.month, p.day, 7);
+    return zonedTimeToUtc(
+      nextMonday.year,
+      nextMonday.month,
+      nextMonday.day,
+      0,
+      0,
+      0,
+      timeZone,
+    );
   }
   if (range === "month") {
     const p = getZonedParts(anchor, timeZone);
@@ -224,16 +241,17 @@ export function timeline(
   view: "day" | "week",
   timeZone: string,
 ): TimelineDay[] {
-  const firstStart =
+  const rangeStart =
     view === "day"
       ? startOfZonedDay(anchor, timeZone)
       : startOfZonedWeek(anchor, timeZone);
+  const origin = getZonedParts(rangeStart, timeZone);
   const dayCount = view === "day" ? 1 : 7;
   const days: TimelineDay[] = [];
 
   for (let i = 0; i < dayCount; i++) {
-    const p = getZonedParts(firstStart + i * MS_PER_DAY, timeZone);
-    const dayStart = zonedTimeToUtc(p.year, p.month, p.day, 0, 0, 0, timeZone);
+    const ymd = calendarAddDays(origin.year, origin.month, origin.day, i);
+    const dayStart = zonedTimeToUtc(ymd.year, ymd.month, ymd.day, 0, 0, 0, timeZone);
     const blocks = sessions
       .filter((s) => sessionBelongsToDay(s, dayStart, timeZone))
       .map((s) => toBlock(s, tags))

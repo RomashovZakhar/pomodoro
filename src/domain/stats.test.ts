@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CompletedSession, Tag } from "./types";
 import { stats } from "./stats";
+import {
+  endOfZonedPeriod,
+  startOfZonedWeek,
+  zonedTimeToUtc,
+} from "./timeline";
 
 const TIME_ZONE = "Europe/Moscow";
 
@@ -76,6 +81,49 @@ describe("stats day", () => {
     expect(result.totalTomatoes).toBe(1);
     expect(result.totalMinutes).toBe(25);
     expect(result.totalDays).toBe(1);
+  });
+});
+
+describe("stats DST boundaries", () => {
+  const NY = "America/New_York";
+
+  /** Воскресенье 8 марта 2026, полдень по Нью-Йорку (день перехода на летнее время). */
+  const MAR_8_NOON_NY = zonedTimeToUtc(2026, 3, 8, 12, 0, 0, NY);
+
+  /** Понедельник 9 марта 2026, 00:30 EDT — после укороченного воскресенья. */
+  const MON_0030_NY = zonedTimeToUtc(2026, 3, 9, 0, 30, 0, NY);
+
+  it("excludes Monday 00:30 EDT from Sunday stats after the short spring-forward day", () => {
+    const sessions: CompletedSession[] = [
+      {
+        id: "mon",
+        tagId: "tag-work",
+        startedAt: MON_0030_NY,
+        recordedMinutes: 25,
+      },
+    ];
+    const result = stats(sessions, tags, MAR_8_NOON_NY, "day", NY);
+    expect(result.periodTomatoes).toBe(0);
+    expect(result.periodMinutes).toBe(0);
+  });
+
+  it("ends the week at the next Monday 00:00 local, not seven fixed UTC hours", () => {
+    const weekStart = startOfZonedWeek(MAR_8_NOON_NY, NY);
+    const weekEnd = endOfZonedPeriod("week", MAR_8_NOON_NY, NY);
+    const nextMonday = zonedTimeToUtc(2026, 3, 9, 0, 0, 0, NY);
+    expect(weekEnd).toBe(nextMonday);
+    expect(weekEnd).not.toBe(weekStart + 7 * 86_400_000);
+
+    const sessions: CompletedSession[] = [
+      {
+        id: "mon",
+        tagId: "tag-work",
+        startedAt: MON_0030_NY,
+        recordedMinutes: 25,
+      },
+    ];
+    const week = stats(sessions, tags, MAR_8_NOON_NY, "week", NY);
+    expect(week.periodTomatoes).toBe(0);
   });
 });
 
