@@ -1,8 +1,9 @@
+import { invoke } from "@tauri-apps/api/core";
 import {
   BaseDirectory,
   exists,
+  mkdir,
   readTextFile,
-  rename,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
 import { initialState } from "../domain/timer";
@@ -55,6 +56,14 @@ export function deserialize(raw: string): TimerState {
   return file.state as TimerState;
 }
 
+async function ensureAppDataDir(): Promise<void> {
+  try {
+    await mkdir(".", { baseDir: BaseDirectory.AppData, recursive: true });
+  } catch {
+    // Directory already exists.
+  }
+}
+
 export function createMemoryStore(seed?: TimerState): Store {
   let current: TimerState | undefined = seed;
 
@@ -71,6 +80,8 @@ export function createMemoryStore(seed?: TimerState): Store {
 export function createTauriStore(): Store {
   return {
     async load() {
+      await ensureAppDataDir();
+
       const present = await exists(POMODORO_FILE, {
         baseDir: BaseDirectory.AppData,
       });
@@ -84,14 +95,13 @@ export function createTauriStore(): Store {
       return deserialize(raw);
     },
     async save(state: TimerState) {
+      await ensureAppDataDir();
+
       const raw = serialize(state);
       await writeTextFile(POMODORO_TEMP_FILE, raw, {
         baseDir: BaseDirectory.AppData,
       });
-      await rename(POMODORO_TEMP_FILE, POMODORO_FILE, {
-        oldPathBaseDir: BaseDirectory.AppData,
-        newPathBaseDir: BaseDirectory.AppData,
-      });
+      await invoke("replace_storage_file");
     },
   };
 }
