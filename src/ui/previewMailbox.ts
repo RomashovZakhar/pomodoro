@@ -22,7 +22,7 @@ export function createPreviewMailbox() {
       if (actions.length > 40) actions.shift();
     },
     readActions(since: number) {
-      const latest = actions.at(-1)?.id ?? 0;
+      const latest = actions.length > 0 ? actions[actions.length - 1]!.id : 0;
       const cursor = Math.max(latest, since < 0 ? 0 : since);
       if (since < 0) return { cursor: latest, actions: [] as PreviewAction[] };
       return {
