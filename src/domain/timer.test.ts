@@ -133,7 +133,7 @@ describe("overtime recording", () => {
     const derived = derive(state, now);
     expect(derived.clockLabel).toBe("+03:12");
     expect(derived.plannedLabel).toBe("было 25:00");
-    expect(derived.addLabel).toBe("Добавить 4 мин");
+    expect(derived.addLabel).toBe("3 мин");
     expect(derived.addMinutes).toBe(4);
     expect(derived.showAdd).toBe(true);
     expect(derived.showBreak).toBe(true);
@@ -199,7 +199,7 @@ describe("overtime recording", () => {
     const elapsedMs = 181 * 60_000;
     const { state, now } = overtimeAt(elapsedMs);
     const derived = derive(state, now);
-    expect(derived.addLabel).toBe("Добавить 180 мин");
+    expect(derived.addLabel).toBe("180 мин");
     expect(derived.addMinutes).toBe(180);
     expect(derived.clockLabel).toBe("+3:00:00");
   });

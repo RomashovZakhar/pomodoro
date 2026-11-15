@@ -16,7 +16,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundEnabled: true,
   notificationsEnabled: true,
   launchAtLogin: true,
-  theme: "system",
+  theme: "light",
 };
 
 export const DEFAULT_SELECTED_TAG_ID = "tag-work";

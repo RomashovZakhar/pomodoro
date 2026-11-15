@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  addButtonLabel,
   formatBigClock,
   formatMenuBar,
+  formatOvertimeChip,
   overtimeAddMinutes,
 } from "./time";
 
@@ -21,6 +21,13 @@ describe("time labels", () => {
     expect(formatBigClock(3 * 3600, "overtime")).toBe("+3:00:00");
     expect(formatMenuBar(24 * 60 + 12, "remaining")).toBe("24:12");
     expect(formatMenuBar(5 * 60, "break")).toBe("перерыв 5:00");
-    expect(addButtonLabel(4)).toBe("Добавить 4 мин");
+  });
+
+  it("shows overtime first in seconds, then in whole minutes", () => {
+    expect(formatOvertimeChip(12_000)).toBe("+12 с");
+    expect(formatOvertimeChip(59_000)).toBe("+59 с");
+    expect(formatOvertimeChip(60_000)).toBe("1 мин");
+    expect(formatOvertimeChip(4 * 60_000 + 32_000)).toBe("4 мин");
+    expect(formatOvertimeChip(181 * 60_000)).toBe("180 мин");
   });
 });

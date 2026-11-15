@@ -9,6 +9,7 @@ import {
 } from "@tauri-apps/plugin-notification";
 import type { AlertPlan } from "../shell/alerts";
 import { createTauriStore } from "../storage/store";
+import { publishPreviewState, startPreviewActionPump } from "./previewSync";
 import type { TimerPorts } from "./useTimer";
 
 const store = createTauriStore();
@@ -60,11 +61,22 @@ export function createTauriPorts(): TimerPorts {
     },
     emitState: (payload) => {
       void emit("timer-state", payload);
+      if (import.meta.env.DEV) {
+        void publishPreviewState(payload).catch(() => {});
+      }
     },
     emitAction: (action) => {
       void emitTo("panel", "timer-action", action);
     },
-    listen: (event, handler) => listen(event, (message) => handler(message.payload)),
+    listen: (event, handler) => {
+      const unlisten = listen(event, (message) => handler(message.payload));
+      if (!import.meta.env.DEV || event !== "timer-action") return unlisten;
+      const stopPump = startPreviewActionPump(handler);
+      return Promise.resolve(unlisten).then((stop) => () => {
+        stopPump();
+        if (typeof stop === "function") stop();
+      });
+    },
     syncAutostart: async (enabled) => {
       if (enabled) await enable();
       else await disable();

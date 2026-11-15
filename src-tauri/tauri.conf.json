@@ -15,9 +15,11 @@
         "label": "panel",
         "title": "Помодоро",
         "width": 360,
-        "height": 480,
+        "height": 360,
         "resizable": false,
         "decorations": false,
+        "transparent": true,
+        "shadow": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": false,
@@ -31,6 +33,8 @@
         "height": 760,
         "center": true,
         "visible": false,
+        "decorations": true,
+        "backgroundColor": "#F3F1EC",
         "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
       }
     ],

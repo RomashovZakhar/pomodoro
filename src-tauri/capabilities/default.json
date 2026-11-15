@@ -5,6 +5,8 @@
   "windows": ["panel", "day"],
   "permissions": [
     "core:default",
+    "core:window:allow-hide",
+    "core:window:allow-set-background-color",
     "opener:default",
     "fs:default",
     "fs:allow-appdata-read",

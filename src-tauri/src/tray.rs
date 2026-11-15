@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
@@ -20,6 +21,24 @@ const OVERTIME_DOT: [u8; 4] = [242, 196, 92, 255];
 static QUITTING: AtomicBool = AtomicBool::new(false);
 static TRAY_ANCHOR: Mutex<Option<(i32, i32, i32, i32)>> = Mutex::new(None);
 static MENU_LABEL: Mutex<Option<Option<String>>> = Mutex::new(None);
+static PANEL_SHOWN_AT: Mutex<Option<Instant>> = Mutex::new(None);
+
+pub fn should_dismiss_panel(elapsed_ms: u128, cursor_on_tray: bool) -> bool {
+    elapsed_ms >= 300 && !cursor_on_tray
+}
+
+pub fn cursor_in_tray_rect(x: f64, y: f64, rect: Option<(i32, i32, i32, i32)>) -> bool {
+    let Some((left, top, width, height)) = rect else {
+        return false;
+    };
+    if width <= 0 || height <= 0 {
+        return false;
+    }
+    x >= left as f64
+        && x < left as f64 + width as f64
+        && y >= top as f64
+        && y < top as f64 + height as f64
+}
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,10 +95,11 @@ pub fn ring_rgba(mode: &str, progress: f32) -> [u8; SIZE * SIZE * 4] {
 }
 
 pub fn install(app: &AppHandle) -> Result<(), String> {
-    for label in [PANEL, DAY] {
-        if let Some(window) = app.get_webview_window(label) {
-            bind_hide_on_close(&window);
-        }
+    if let Some(window) = app.get_webview_window(PANEL) {
+        bind_panel_events(&window);
+    }
+    if let Some(window) = app.get_webview_window(DAY) {
+        bind_hide_on_close(&window);
     }
 
     let menu = build_menu(app, None, false)?;
@@ -152,6 +172,12 @@ pub fn show_day(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn hide_panel(app: AppHandle) -> Result<(), String> {
+    let window = webview(&app, PANEL)?;
+    hide_with_retry(&window)
+}
+
+#[tauri::command]
 pub fn quit(app: AppHandle) {
     request_quit(&app);
 }
@@ -160,12 +186,19 @@ pub fn open_panel(app: &AppHandle) -> Result<(), String> {
     let window = webview(app, PANEL)?;
     let _ = window.unminimize();
     place_panel(&window)?;
+    if let Ok(mut shown) = PANEL_SHOWN_AT.lock() {
+        *shown = Some(Instant::now());
+    }
+    let _ = window.set_always_on_top(true);
     window.show().map_err(|err| err.to_string())?;
     window.set_focus().map_err(|err| err.to_string())?;
     Ok(())
 }
 
 fn open_day(app: &AppHandle) -> Result<(), String> {
+    if let Ok(panel) = webview(app, PANEL) {
+        let _ = hide_with_retry(&panel);
+    }
     let window = webview(app, DAY)?;
     let _ = window.unminimize();
     window.show().map_err(|err| err.to_string())?;
@@ -198,6 +231,17 @@ fn webview(app: &AppHandle, label: &str) -> Result<WebviewWindow, String> {
         .ok_or_else(|| format!("окно {label} не найдено"))
 }
 
+fn hide_with_retry(window: &WebviewWindow) -> Result<(), String> {
+    let _ = window.set_always_on_top(false);
+    match window.hide() {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            eprintln!("не удалось скрыть окно, повтор: {err}");
+            window.hide().map_err(|retry| retry.to_string())
+        }
+    }
+}
+
 fn bind_hide_on_close(window: &WebviewWindow) {
     let hidden = window.clone();
     window.on_window_event(move |event| {
@@ -206,9 +250,47 @@ fn bind_hide_on_close(window: &WebviewWindow) {
                 return;
             }
             api.prevent_close();
-            let _ = hidden.hide();
+            let _ = hide_with_retry(&hidden);
         }
     });
+}
+
+fn bind_panel_events(window: &WebviewWindow) {
+    let hidden = window.clone();
+    window.on_window_event(move |event| {
+        match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                if QUITTING.load(Ordering::SeqCst) {
+                    return;
+                }
+                api.prevent_close();
+                let _ = hide_with_retry(&hidden);
+            }
+            tauri::WindowEvent::Focused(false) => {
+                if QUITTING.load(Ordering::SeqCst) {
+                    return;
+                }
+                let elapsed = PANEL_SHOWN_AT
+                    .lock()
+                    .ok()
+                    .and_then(|shown| *shown)
+                    .map(|at| at.elapsed().as_millis())
+                    .unwrap_or(0);
+                if should_dismiss_panel(elapsed, cursor_on_tray(&hidden)) {
+                    let _ = hide_with_retry(&hidden);
+                }
+            }
+            _ => {}
+        }
+    });
+}
+
+fn cursor_on_tray(window: &WebviewWindow) -> bool {
+    let rect = TRAY_ANCHOR.lock().ok().and_then(|anchor| *anchor);
+    let Ok(cursor) = window.cursor_position() else {
+        return false;
+    };
+    cursor_in_tray_rect(cursor.x, cursor.y, rect)
 }
 
 fn place_panel(window: &WebviewWindow) -> Result<(), String> {
@@ -340,7 +422,7 @@ fn build_menu(
 
 #[cfg(test)]
 mod tests {
-    use super::ring_rgba;
+    use super::{cursor_in_tray_rect, ring_rgba, should_dismiss_panel};
 
     const SIZE: usize = 32;
 
@@ -365,6 +447,22 @@ mod tests {
             pixel(&empty, 15, 3),
             "верхняя точка окружности должна отличаться при полном и пустом кольце"
         );
+    }
+
+    #[test]
+    fn dismisses_panel_only_after_the_open_click_and_away_from_the_tray() {
+        assert!(!should_dismiss_panel(299, false));
+        assert!(should_dismiss_panel(300, false));
+        assert!(!should_dismiss_panel(300, true));
+    }
+
+    #[test]
+    fn cursor_on_tray_uses_the_icon_rectangle() {
+        let rect = Some((10, 20, 32, 32));
+        assert!(cursor_in_tray_rect(10.0, 20.0, rect));
+        assert!(!cursor_in_tray_rect(42.0, 20.0, rect));
+        assert!(!cursor_in_tray_rect(10.0, 20.0, None));
+        assert!(!cursor_in_tray_rect(10.0, 20.0, Some((10, 20, 0, 32))));
     }
 
     #[test]

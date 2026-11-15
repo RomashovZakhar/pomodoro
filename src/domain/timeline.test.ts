@@ -4,6 +4,7 @@ import { initialState, reduce } from "./timer";
 import {
   durationLabel,
   emptyDayCopy,
+  emptyWeekCopy,
   timeline,
   tomatoScale,
 } from "./timeline";
@@ -46,6 +47,12 @@ describe("durationLabel", () => {
 describe("emptyDayCopy", () => {
   it("returns the exact empty-day string", () => {
     expect(emptyDayCopy()).toBe("В этот день сессий не было.");
+  });
+});
+
+describe("emptyWeekCopy", () => {
+  it("returns the exact empty-week string", () => {
+    expect(emptyWeekCopy()).toBe("На этой неделе сессий не было.");
   });
 });
 

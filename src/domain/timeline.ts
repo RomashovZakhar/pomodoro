@@ -208,6 +208,10 @@ export function emptyDayCopy(): string {
   return "В этот день сессий не было.";
 }
 
+export function emptyWeekCopy(): string {
+  return "На этой неделе сессий не было.";
+}
+
 export function tomatoScale(recordedMinutes: number): number {
   return Math.min(2, Math.max(0.8, recordedMinutes / 25));
 }

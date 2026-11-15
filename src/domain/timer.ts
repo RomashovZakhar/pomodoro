@@ -3,8 +3,8 @@ import {
   DEFAULT_SETTINGS,
   DEFAULT_TAGS,
 } from "./defaults";
-import { addButtonLabel, formatBigClock, formatMenuBar, overtimeAddMinutes } from "./time";
-import { FOCUS_MINUTE_OPTIONS } from "./types";
+import { formatBigClock, formatMenuBar, formatOvertimeChip, overtimeAddMinutes } from "./time";
+import { FOCUS_MINUTE_MAX, FOCUS_MINUTE_MIN } from "./types";
 import type {
   CompletedSession,
   Derived,
@@ -31,7 +31,11 @@ function isArchived(tag: Tag): boolean {
 }
 
 function isFocusMinutes(minutes: number): minutes is FocusMinutes {
-  return (FOCUS_MINUTE_OPTIONS as readonly number[]).includes(minutes);
+  return (
+    Number.isInteger(minutes) &&
+    minutes >= FOCUS_MINUTE_MIN &&
+    minutes <= FOCUS_MINUTE_MAX
+  );
 }
 
 function activeTagCount(tags: Tag[]): number {
@@ -435,10 +439,15 @@ export function reduce(state: TimerState, action: Action, now: number): TimerSta
       }
       const nextTags = [...settled.tags];
       const current = nextTags[index]!;
+      const focusMinutes =
+        action.focusMinutes !== undefined && isFocusMinutes(action.focusMinutes)
+          ? action.focusMinutes
+          : current.focusMinutes;
       nextTags[index] = {
         ...current,
         name: action.name,
         ...(action.color !== undefined ? { color: action.color } : {}),
+        focusMinutes,
       };
       return { ...settled, tags: nextTags };
     }
@@ -530,7 +539,7 @@ function deriveOpen(state: TimerState, now: number): Derived {
       tooltip: `${menuBarLabel} · ${tag.name}`,
       tagName: tag.name,
       plannedLabel: `было ${plannedClock}`,
-      addLabel: addButtonLabel(addMinutes),
+      addLabel: formatOvertimeChip(elapsedMs),
       addMinutes,
       showSurrender: false,
       showAdd: true,

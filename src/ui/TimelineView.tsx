@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { TimerState } from "../domain/types";
-import { emptyDayCopy, timeline } from "../domain/timeline";
+import { emptyDayCopy, emptyWeekCopy, timeline } from "../domain/timeline";
+import { inkFor } from "./ink";
 
 export function TimelineView({
   state,
@@ -30,45 +31,57 @@ export function TimelineView({
         })
       : null;
 
+  const dateTitle = new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long",
+    timeZone: zone,
+  }).format(now);
+
   return (
-    <section className="card timeline" role="group" aria-label="Лента">
-      <div className="ranges">
-        <button
-          type="button"
-          aria-pressed={view === "day"}
-          onClick={() => setView("day")}
-        >
-          День
-        </button>
-        <button
-          type="button"
-          aria-pressed={view === "week"}
-          onClick={() => setView("week")}
-        >
-          Неделя
-        </button>
-      </div>
-      {empty ? <p>{emptyDayCopy()}</p> : null}
+    <section className="timeline" role="group" aria-label="Лента">
+      <header className="screen-head">
+        <h1>{dateTitle}</h1>
+        <div className="ranges">
+          <button
+            type="button"
+            className="range"
+            aria-pressed={view === "day"}
+            onClick={() => setView("day")}
+          >
+            День
+          </button>
+          <button
+            type="button"
+            className="range"
+            aria-pressed={view === "week"}
+            onClick={() => setView("week")}
+          >
+            Неделя
+          </button>
+        </div>
+      </header>
+      {empty ? <p className="hint">{view === "week" ? emptyWeekCopy() : emptyDayCopy()}</p> : null}
       {days.map((day) => (
-        <div
-          key={day.start}
-          className={view === "week" ? "timeline-day" : undefined}
-        >
+        <div key={day.start} className={view === "week" ? "timeline-day" : undefined}>
           {weekDayLabel ? (
-            <h3 className="timeline-day-heading">
-              {weekDayLabel.format(day.start)}
-            </h3>
+            <h3 className="timeline-day-heading">{weekDayLabel.format(day.start)}</h3>
           ) : null}
           {day.blocks.map((block) => (
-            <article key={block.sessionId} className="block">
-              <span className="swatch" style={{ background: block.color }} />
-              <span>
-                {block.name} · {clock.format(block.startedAt)} · {block.label}
-              </span>
-              <button type="button" onClick={() => onDelete(block.sessionId)}>
-                Удалить сессию
-              </button>
-            </article>
+            <div key={block.sessionId} className="session">
+              <time className="session-time">{clock.format(block.startedAt)}</time>
+              <article
+                className="block"
+                style={{ background: block.color, color: inkFor(block.color) }}
+              >
+                <span className="block-copy">
+                  <strong>{block.name}</strong>
+                  <span>{block.label}</span>
+                </span>
+                <button type="button" onClick={() => onDelete(block.sessionId)}>
+                  Удалить
+                </button>
+              </article>
+            </div>
           ))}
         </div>
       ))}

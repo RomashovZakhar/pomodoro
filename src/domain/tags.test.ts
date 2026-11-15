@@ -38,6 +38,26 @@ describe("update-tag", () => {
     expect(tag?.name).toBe("Дедлайн");
     expect(derive(state, t0).tagName).toBe("Дедлайн");
   });
+
+  it("saves the edited name together with color and length", () => {
+    const state = reduce(
+      initialState(),
+      {
+        type: "update-tag",
+        tagId: "tag-own",
+        name: "Чтение",
+        color: "#112233",
+        focusMinutes: 12,
+      },
+      t0,
+    );
+    const tag = state.tags.find((item) => item.id === "tag-own");
+    expect(tag).toMatchObject({
+      name: "Чтение",
+      color: "#112233",
+      focusMinutes: 12,
+    });
+  });
 });
 
 describe("select-tag", () => {
@@ -75,14 +95,30 @@ describe("set-focus-minutes", () => {
     expect(derive(state, t0).clockLabel).toBe("50:00");
   });
 
-  it("rejects minutes outside FOCUS_MINUTE_OPTIONS", () => {
-    const before = initialState();
-    const state = reduce(
-      before,
+  it("stores a custom length on the selected tag", () => {
+    let state = reduce(
+      initialState(),
       { type: "set-focus-minutes", minutes: 12 },
       t0,
     );
-    expect(state).toEqual(before);
+    expect(state.tags.find((t) => t.id === "tag-work")?.focusMinutes).toBe(12);
+    expect(derive(state, t0).clockLabel).toBe("12:00");
+
+    state = reduce(state, { type: "select-tag", tagId: "tag-own" }, t0);
+    state = reduce(state, { type: "set-focus-minutes", minutes: 12 }, t0);
+    state = reduce(state, { type: "select-tag", tagId: "tag-work" }, t0);
+    state = reduce(state, { type: "select-tag", tagId: "tag-own" }, t0);
+    expect(derive(state, t0).clockLabel).toBe("12:00");
+    expect(derive(state, t0).tagName).toBe("Своё");
+  });
+
+  it("rejects minutes outside 1..180", () => {
+    const before = initialState();
+    for (const minutes of [0, 181, 12.5]) {
+      expect(reduce(before, { type: "set-focus-minutes", minutes }, t0)).toEqual(
+        before,
+      );
+    }
   });
 });
 

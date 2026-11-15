@@ -108,6 +108,7 @@ pub fn run() {
             read_alert_sound,
             tray::set_tray_status,
             tray::show_panel,
+            tray::hide_panel,
             tray::show_day,
             tray::quit
         ])

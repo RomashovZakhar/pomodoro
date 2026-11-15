@@ -1,8 +1,9 @@
-export const FOCUS_MINUTE_OPTIONS = [
-  5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 75, 90, 120, 150, 180,
-] as const;
+export const FOCUS_MINUTE_MIN = 1;
+export const FOCUS_MINUTE_MAX = 180;
+export const FOCUS_PRESETS = [15, 25, 50, 90] as const;
+export const FOCUS_MINUTE_OPTIONS = FOCUS_PRESETS;
 
-export type FocusMinutes = (typeof FOCUS_MINUTE_OPTIONS)[number];
+export type FocusMinutes = number;
 
 export type Theme = "system" | "light" | "dark";
 
@@ -83,7 +84,13 @@ export type TimerAction =
   | { type: "select-tag"; tagId: string }
   | { type: "set-focus-minutes"; minutes: number }
   | { type: "create-tag"; name: string; color: string; focusMinutes?: FocusMinutes }
-  | { type: "update-tag"; tagId: string; name: string; color?: string }
+  | {
+      type: "update-tag";
+      tagId: string;
+      name: string;
+      color?: string;
+      focusMinutes?: number;
+    }
   | { type: "archive-tag"; tagId: string }
   | { type: "update-settings"; settings: Partial<Settings> }
   | { type: "delete-session"; sessionId: string };

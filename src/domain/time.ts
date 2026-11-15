@@ -66,6 +66,11 @@ export function formatMenuBar(
   return time;
 }
 
-export function addButtonLabel(n: number): string {
-  return `Добавить ${n} мин`;
+export function formatOvertimeChip(elapsedMs: number): string {
+  const seconds = Math.min(
+    OVERTIME_CAP_SECONDS,
+    Math.max(0, Math.floor(elapsedMs / 1000)),
+  );
+  if (seconds < 60) return `+${seconds} с`;
+  return `${Math.floor(seconds / 60)} мин`;
 }
